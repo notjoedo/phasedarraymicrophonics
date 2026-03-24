@@ -13,14 +13,16 @@
 set -e
 
 if [ "$#" -ne 2 ]; then
-    echo "Usage: ./capture.sh <SAD_X_COORD> <SOD_Y_COORD>"
-    echo "Example: ./capture.sh 1.5 2.0"
+    echo "Usage: ./capture.sh <SAD_X_COORD> <SOD_Y_COORD> [DURATION_SEC] [COUNTDOWN_SEC]"
+    echo "Example (defaults): ./capture.sh 1.5 2.0"
+    echo "Example (custom): ./capture.sh 1.5 2.0 10 5"
     exit 1
 fi
 
 SAD_X=$1
 SOD_Y=$2
-DURATION=15
+DURATION=${3:-15}
+COUNTDOWN=${4:-3}
 
 # Map the coordinates to a session code format your dataset can read
 SESSION_CODE="Grid_X${SAD_X}_Y${SOD_Y}"
@@ -35,16 +37,17 @@ mkdir -p "${BASE_DIR}/FIGS"
 echo "======================================"
 echo "Session Code: $SESSION_CODE"
 echo "Target Mic Position: SAD ($SAD_X), SOD ($SOD_Y)"
+echo "Recording Duration: $DURATION seconds"
+echo "Countdown Buffer: $COUNTDOWN seconds"
 echo "Output Directory: $INDIV_DIR"
 echo "======================================"
 
 # 3-second countdown to eliminate handling noise
 echo -n "Starting capture in 3... "
-sleep 1
-echo -n "2... "
-sleep 1
-echo -n "1... "
-sleep 1
+for ((i=COUNTDOWN; i>0; i--)); do
+    echo -n "$i... "
+    sleep 1
+done
 echo "RECORDING for $DURATION seconds!"
 
 # -------------------------------------------------------------------------
