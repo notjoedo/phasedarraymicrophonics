@@ -16,18 +16,18 @@ import torchaudio
 import torch.nn as nn
 
 class MicSimNet(nn.Module):
-    def __init__(self, num_input_mics):
+    def __init__(self, num_input_mics=3):
         super().__init__()
         # This part processes the sound.
         self.audio_tower = nn.Sequential(
-            nn.Conv2d(in_channels=num_input_mics, out_channels=8, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=1, out_channels=8, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(in_channels=8, out_channels=16, kernel_size=3, padding=1),
             nn.ReLU()
         )
         # This part processes the 3D (x, y, z) position.
         self.pos_tower = nn.Sequential(
-            nn.Linear(in_features=3, out_features=16),
+            nn.Linear(in_features=1, out_features=16),
             nn.ReLU(),
             nn.Linear(in_features=16, out_features=16)
         )
@@ -36,9 +36,9 @@ class MicSimNet(nn.Module):
             # Input channels = 16 (from audio) + 16 (from position) = 32
             nn.ConvTranspose2d(in_channels=32, out_channels=16, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(in_channels=16, out_channels=1, kernel_size=3, padding=1)
+            nn.ConvTranspose2d(in_channels=16, out_channels=num_output_mics, kernel_size=3, padding=1)
         )
-    def forward(self, input_spectrograms, target_position):
+    def forward(self, input_spectrogram, distance):
         """
         Simulate the microphone array signals given a source signal and its position.
         
@@ -47,8 +47,8 @@ class MicSimNet(nn.Module):
             target_position (Tensor): The position of the sound source (3D tensor).
         """
         #Process audio and position information separately
-        audio_features = self.audio_tower(input_spectrograms)
-        pos_features = self.pos_tower(target_position)
+        audio_features = self.audio_tower(input_spectrogram)
+        pos_features = self.pos_tower(distance)
 
         #Combine both streams of information
         b, _, freq_bins, time_frames = audio_features.shape
@@ -66,33 +66,33 @@ def run_sanity_check():
     A simple sanity check to ensure the model runs without errors.
     """
     # --- Configuration ---
-    num_input_mics = 3  # Assuming 4 total mics, so 3 are used as input.
+    num_output_mics = 3  # Assuming 4 total mics, so 3 are used as input.
     batch_size = 4      # A small batch of 4 examples.
     freq_bins = 513     # A typical number of frequency bins for a spectrogram.
     time_frames = 100   # A typical number of time frames.
 
     # --- Step 1: Create an instance of the model ---
-    model = MicSimNet(num_input_mics=num_input_mics)
+    model = MicSimNet(num_output_mics=num_output_mics)
     print("Model created successfully.")
 
     # --- Step 2: Create FAKE input data with the correct shape ---
     print("\nCreating fake data for testing...")
-    fake_specs = torch.randn(batch_size, num_input_mics, freq_bins, time_frames)
-    fake_pos = torch.randn(batch_size, 3)
+    fake_dry_specs = torch.randn(batch_size, 1, freq_bins, time_frames)
+    fake_distance = torch.randn(batch_size, 1)
     
-    print(f"Shape of fake spectrograms: {fake_specs.shape}")
-    print(f"Shape of fake positions:   {fake_pos.shape}")
+    print(f"Shape of dry source spectrograms: {fake_dry_specs.shape}")
+    print(f"Shape of Y-distances:   {fake_distance.shape}")
 
     # --- Step 3: Pass the fake data through the model ---
     try:
-        output = model(fake_specs, fake_pos)
+        output = model(fake_dry_specs, fake_distance)
         print("\nModel forward pass successful!")
         print(f"Output shape: {output.shape}")
         
         # Check if the output shape is what we expect
-        expected_shape = (batch_size, 1, freq_bins, time_frames)
-        assert output.shape == expected_shape, "Output shape is incorrect!"
-        print("\n✅ Success! The model works and the output shape is correct.")
+        expected_shape = (batch_size, num_output_mics, freq_bins, time_frames)
+        assert output.shape == expected_shape, f"Output shape is incorrect! Expected {expected_shape} but got {output.shape}"
+        print("\n✅ Success! The model correctly predicts the 3-channel array response.")
         
     except Exception as e:
         print(f"\n❌ Error during model forward pass: {e}")
